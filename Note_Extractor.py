@@ -2,25 +2,25 @@ import numpy as np
 import math
 from scipy.io.wavfile import read
 from scipy.io.wavfile import write
-from PIL import Image
 import scipy.misc
 import random
 import time
 import scipy.misc
 import cmath
 import Normalizer
+import mido
     
 
 def extract_notes(file,timestep,spectrum_bounds,tolerance):
-   """Extracts notes from wav file. Currently in beta stage :
-       only returnes the list of all notes and intensities at each time in a table
-       in the format : (time,(note,intensity))
-       Takes the following arguments :
-       -file (string) : name of the file
-       -timestep, the length of the atoms of time over which the notes are extracted
-       -spectrum_bounds ([lower_frequency,higher_frequency]) : is the range of frequency (minimum 1 Hz) which are to be included in analysis.
-       It is advised to cut around 1000 Hz (unless fundamentals are higher) to avoid the inclusion of harmonics in the list of notes.
-       -tolerance (float) : indicates under what intensity a frequency is just dropped (in proportion to maximum intensity). By default, choose 0.25."""
+    """Extracts notes from wav file. Currently in beta stage :
+    only returnes the list of all notes and intensities at each time in a table
+    in the format : (time,(note,intensity))
+    Takes the following arguments :
+    -file (string) : name of the file
+    -timestep, the length of the atoms of time over which the notes are extracted
+    -spectrum_bounds ([lower_frequency,higher_frequency]) : is the range of frequency (minimum 1 Hz) which are to be included in analysis.
+    It is advised to cut around 1000 Hz (unless fundamentals are higher) to avoid the inclusion of harmonics in the list of notes.
+    -tolerance (float) : indicates under what intensity a frequency is just dropped (in proportion to maximum intensity). By default, choose 0.25."""
     beg=int(timestep*spectrum_bounds[0]/44100)
     end=int(timestep*spectrum_bounds[1]/44100)
     sound=read(file)[1]
@@ -59,7 +59,9 @@ def extract_notes(file,timestep,spectrum_bounds,tolerance):
                 a=(atom_spectrum[j])
                 if(abs(a)>=tolerance*Max):
                     a=(atom_spectrum[j])
-                    notes.append((int(12*math.log(j)/math.log(2)),int(127*abs(atom_spectrum[j])/Max)))
+                    k=int(127*abs(atom_spectrum[j])/Max)
+                    l=int(0.5+(12*math.log(j)/math.log(2)))
+                    notes.append((l,k))
                 else:
                     a=0
                 spectrum_modified.append(a)
@@ -75,10 +77,32 @@ def extract_notes(file,timestep,spectrum_bounds,tolerance):
         i=i+timestep
     return note_list
 
+def note_in_list(note,liste):
+    for i in range(len(liste)):
+        if(liste[i][0]==note[0]):
+            return True
+    return False
 
-Normalizer.normalize('impact.wav')
+def get_midi_list(note_list,timestep):
+    mid = mido.MidiFile()
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+    for i in range(len(note_list)-1):
+        first=int(1024*timestep/44100)
+        for j in range(len(note_list[i][1])):
+            track.append(mido.Message('note_on', channel=1, note=note_list[i][1][j][0], velocity=note_list[i][1][j][1], time=first))
+            first=0
+        for k in range(len(note_list[i-1][1])):
+            if(not(note_in_list(note_list[i-1][1][k],note_list[i][1]))):
+                track.append(mido.Message('note_off',channel=1,note=note_list[i-1][1][k][0],time=first))
+                first=0
+    mid.save('new_song.mid')
+
+        
+
+
+Normalizer.normalize('fatrat.wav')
 #normalize sound before execution to avoid silent parts in resulting output due to discarding intensities under the threshold).
-cc=compress('impact_optimized.wav',5133,[1,1000],0.25)
+cc=extract_notes('fatrat_optimized.wav',5191,[100,1000],0.225)
 #prints the list of notes. For debugging purposes. Will eventually be used to create midi notes.
-for i in range(len(cc)):
-    print(cc[i])
+get_midi_list(cc,5191)
